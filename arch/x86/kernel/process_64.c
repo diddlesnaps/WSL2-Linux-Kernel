@@ -329,6 +329,64 @@ static unsigned long x86_fsgsbase_read_task(struct task_struct *task,
 	return base;
 }
 
+unsigned long x86_gsbase_read_cpu_inactive(void)
+{
+	unsigned long gsbase;
+
+	if (static_cpu_has(X86_FEATURE_FSGSBASE)) {
+		bool need_restore = false;
+		unsigned long flags;
+
+		/*
+		 * We read the inactive GS base value by swapping
+		 * to make it the active one. But we cannot allow
+		 * an interrupt while we switch to and from.
+		 */
+		if (!irqs_disabled()) {
+			local_irq_save(flags);
+			need_restore = true;
+		}
+
+		native_swapgs();
+		gsbase = rdgsbase();
+		native_swapgs();
+
+		if (need_restore)
+			local_irq_restore(flags);
+	} else {
+		rdmsrl(MSR_KERNEL_GS_BASE, gsbase);
+	}
+
+	return gsbase;
+}
+
+void x86_gsbase_write_cpu_inactive(unsigned long gsbase)
+{
+	if (static_cpu_has(X86_FEATURE_FSGSBASE)) {
+		bool need_restore = false;
+		unsigned long flags;
+
+		/*
+		 * We write the inactive GS base value by swapping
+		 * to make it the active one. But we cannot allow
+		 * an interrupt while we switch to and from.
+		 */
+		if (!irqs_disabled()) {
+			local_irq_save(flags);
+			need_restore = true;
+		}
+
+		native_swapgs();
+		wrgsbase(gsbase);
+		native_swapgs();
+
+		if (need_restore)
+			local_irq_restore(flags);
+	} else {
+		wrmsrl(MSR_KERNEL_GS_BASE, gsbase);
+	}
+}
+
 unsigned long x86_fsbase_read_task(struct task_struct *task)
 {
 	unsigned long fsbase;
