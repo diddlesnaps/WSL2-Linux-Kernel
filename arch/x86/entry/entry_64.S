@@ -38,6 +38,7 @@
 #include <asm/export.h>
 #include <asm/frame.h>
 #include <asm/nospec-branch.h>
+#include <asm/fsgsbase.h>
 #include <linux/err.h>
 
 #include "calling.h"
@@ -1210,9 +1211,14 @@ idtentry machine_check		do_mce			has_error_code=0	paranoid=1
 #endif
 
 /*
- * Save all registers in pt_regs, and switch gs if needed.
- * Use slow, but surefire "are we in kernel?" check.
- * Return: ebx=0: need swapgs on exit, ebx=1: otherwise
+ * Save all registers in pt_regs. Return GS base related information
+ * in EBX depending on the availability of the FSGSBASE instructions:
+ *
+ * FSGSBASE	R/EBX
+ *     N        0 -> SWAPGS on exit
+ *              1 -> no SWAPGS on exit
+ *
+ *     Y        GS base value at entry, must be restored in paranoid_exit
  */
 ENTRY(paranoid_entry)
 	UNWIND_HINT_FUNC
@@ -1237,7 +1243,29 @@ ENTRY(paranoid_entry)
 	 */
 	SAVE_AND_SWITCH_TO_KERNEL_CR3 scratch_reg=%rax save_reg=%r14
 
-	/* EBX = 1 -> kernel GSBASE active, no restore required */
+	/*
+	 * Handling GS base depends on the availability of FSGSBASE.
+	 *
+	 * Without FSGSBASE the kernel enforces that negative GS base
+	 * values indicate kernel GS base. With FSGSBASE no assumptions
+	 * can be made about the GS base value when entering from user
+	 * space.
+	*/
+	ALTERNATIVE "jmp .Lparanoid_entry_checkgs", "", X86_FEATURE_FSGSBASE
+
+	/*
+	 * Read the current GS base and store it in %rbx unconditionally,
+	 * retrieve and set the current CPUs kernel GS base. The stored value
+	 * has to be restored in paranoid_exit unconditionally.
+	 *
+	 * This unconditional write of GS base ensures no subsequent load
+	 * based on a mispredicted GS base.
+	 */
+	SAVE_AND_SET_GSBASE scratch_reg=%rax save_reg=%rbx
+	ret
+
+.Lparanoid_entry_checkgs:
+	/* EBX = 1 -> kernel GS base active, no restore required */
 	movl	$1, %ebx
 	/*
 	 * The kernel-enforced convention is a negative GS base indicates
@@ -1264,10 +1292,17 @@ END(paranoid_entry)
  *
  * We may be returning to very strange contexts (e.g. very early
  * in syscall entry), so checking for preemption here would
- * be complicated.  Fortunately, we there's no good reason
- * to try to handle preemption here.
+ * be complicated.  Fortunately, there's no good reason to try
+ * to handle preemption here.
  *
- * On entry, ebx is "no swapgs" flag (1: don't need swapgs, 0: need it)
+ * R/EBX contains the GS base related information depending on the
+ * availability of the FSGSBASE instructions:
+ *
+ * FSGSBASE	R/EBX
+ *     N        0 -> SWAPGS on exit
+ *              1 -> no SWAPGS on exit
+ *
+ *     Y        User space GS base, must be restored unconditionally
  */
 ENTRY(paranoid_exit)
 	UNWIND_HINT_REGS
@@ -1284,7 +1319,15 @@ ENTRY(paranoid_exit)
 	TRACE_IRQS_OFF_DEBUG
 	RESTORE_CR3	scratch_reg=%rax save_reg=%r14
 
-	/* If EBX is 0, SWAPGS is required */
+	/* Handle the three GS base cases */
+	ALTERNATIVE "jmp .Lparanoid_exit_checkgs", "", X86_FEATURE_FSGSBASE
+
+	/* With FSGSBASE enabled, unconditionally resotre GS base */
+	wrgsbase	%rbx
+	jmp	restore_regs_and_return_to_kernel
+
+.Lparanoid_exit_checkgs:
+	/* On non-FSGSBASE systems, conditionally do SWAPGS */
 	testl	%ebx, %ebx
 	jnz	restore_regs_and_return_to_kernel
 
@@ -1698,10 +1741,27 @@ end_repeat_nmi:
 	/* Always restore stashed CR3 value (see paranoid_entry) */
 	RESTORE_CR3 scratch_reg=%r15 save_reg=%r14
 
-	testl	%ebx, %ebx			/* swapgs needed? */
+	/*
+	 * The above invocation of paranoid_entry stored the GS base
+	 * related information in R/EBX depending on the availability
+	 * of FSGSBASE.
+	 *
+	 * If FSGSBASE is enabled, restore the saved GS base value
+	 * unconditionally, otherwise take the conditional SWAPGS path.
+	 */
+	ALTERNATIVE "jmp nmi_no_fsgsbase", "", X86_FEATURE_FSGSBASE
+
+	wrgsbase	%rbx
+	jmp	nmi_restore
+
+nmi_no_fsgsbase:
+	/* EBX == 0 -> invoke SWAPGS */
+	testl	%ebx, %ebx
 	jnz	nmi_restore
+
 nmi_swapgs:
 	SWAPGS_UNSAFE_STACK
+
 nmi_restore:
 	POP_REGS
 
