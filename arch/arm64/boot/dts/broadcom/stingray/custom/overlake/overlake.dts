@@ -64,6 +64,13 @@
 		tcg-log@C0000000 {
 			reg = <0x00000000 0xC0000000 0x00000000 0x00010000>;
 		};
+
+		ramoops {
+			compatible = "ramoops";
+			reg = <0x00000009 0x7FC00000 0x00000000 0x00400000>;
+			record-size = <0x80000>;
+			max-reason = <5>;
+		};
 	};
 
 	tpm@0 {
