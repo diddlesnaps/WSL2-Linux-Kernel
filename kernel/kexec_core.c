@@ -1182,6 +1182,7 @@ int kernel_kexec(void)
 		machine_shutdown();
 	}
 
+	pr_msft("kernel reboot end\n");
 	kmsg_dump(KMSG_DUMP_SHUTDOWN);
 	machine_kexec(kexec_image);
 
