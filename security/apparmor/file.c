@@ -16,7 +16,6 @@
 #include <linux/fdtable.h>
 #include <linux/file.h>
 
-#include "include/af_unix.h"
 #include "include/apparmor.h"
 #include "include/audit.h"
 #include "include/cred.h"
@@ -285,8 +284,7 @@ int __aa_path_perm(const char *op, struct aa_profile *profile, const char *name,
 {
 	int e = 0;
 
-	if (profile_unconfined(profile) ||
-	    ((flags & PATH_SOCK_COND) && !PROFILE_MEDIATES_AF(profile, AF_UNIX)))
+	if (profile_unconfined(profile))
 		return 0;
 	aa_str_perms(profile->file.dfa, profile->file.start, name, cond, perms);
 	if (request & ~perms->allow)
