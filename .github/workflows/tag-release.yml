@@ -1,0 +1,53 @@
+name: 🏷️ Re-tag new upstream release
+
+on:
+  workflow_call:
+    inputs:
+      missing_tags:
+        required: true
+        type: string
+
+jobs:
+  tag-release:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        upstream_tag: ${{ fromJson(inputs.missing_tags) }}
+    steps:
+    - name: Build Variables
+      id: build_variables
+      env: 
+        UPSTREAM_TAG: ${{ matrix.upstream_tag }}
+      run: |
+        # Work out which snapd-support branch we need to merge
+        SNAPD_TAG="${UPSTREAM_TAG/linux-msft-wsl-/linux-msft-snapd-}"
+        RELEASE_MINOR_VER="$(echo "$UPSTREAM_TAG" | sed -Ee 's/^linux-msft-wsl-([0-9]+\.[0-9]+).*$/\1/')"
+
+        echo '::echo::on'
+        echo "::set-output name=snapd_support_branch::snapd-support-$RELEASE_MINOR_VER.y"
+        echo "::set-output name=snapd_tag::$SNAPD_TAG"
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ matrix.upstream_tag }}
+        fetch-depth: 0
+    - name: Configure GIT
+      run: |
+        git config user.email 'actions@github.com'
+        git config user.name 'GitHub Actions'
+        git remote add upstream https://github.com/microsoft/WSL2-Linux-Kernel.git
+    - name: Tag new release
+      run: |
+        set -x
+
+        # Merge the snapd-support branch
+        git fetch --no-tags --prune --progress --no-recurse-submodules origin +refs/heads/"${{ steps.build_variables.outputs.snapd_support_branch }}"*:refs/remotes/origin/"${{ steps.build_variables.outputs.snapd_support_branch }}"*
+        git merge --no-edit "origin/${{ steps.build_variables.outputs.snapd_support_branch }}"
+
+        # Tag the new release
+        git tag -f "${{ steps.build_variables.outputs.snapd_tag }}"
+        git push --tags --force
+    - name: Failure or cancellation cleanup
+      if: ${{ failure() || cancelled() }}
+      run: |
+        git push origin ":refs/tags/${{ steps.build_variables.outputs.snapd_tag }}" || true
+        git push origin ":refs/tags/${{ matrix.upstream_tag }}" || true
