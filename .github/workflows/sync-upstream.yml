@@ -1,0 +1,74 @@
+name: 🔄 Sync with upstream
+
+on:
+  workflow_call:
+    outputs:
+      missing_tags:
+        description: The upstream tags that are missing locally
+        value: ${{ jobs.sync_upstream.outputs.missing_tags }}
+      snapd_tags:
+        description: The new tags that we need to create
+        value: ${{ jobs.sync_upstream.outputs.snapd_tags }}
+
+jobs:
+  sync_upstream:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -yyq jq
+    - uses: actions/checkout@v3
+    - name: Configure GIT
+      run: |
+        git config user.email 'actions@github.com'
+        git config user.name 'GitHub Actions'
+        git remote add upstream https://github.com/microsoft/WSL2-Linux-Kernel.git
+    - name: Sync from upstream
+      run: |
+        git fetch --tags origin
+        git fetch --tags --prune --progress --no-recurse-submodules upstream +refs/heads/master*:refs/remotes/upstream/master*
+    - name: Parse upstream tags
+      id: parse_tags
+      run: |
+        set -x
+
+        REMOTE_TAGS="$(git show-ref --tags | awk '{print $2}' | cut -d/ -f3 | grep '^linux-msft-wsl-' || true)"
+        ORIGIN_TAGS="$(git ls-remote --tags origin | grep -v '\^{}' | cut -f2 | cut -d/ -f3 | grep '^linux-msft-wsl-' || true)"
+
+        MISSING_TAGS="$(echo "$REMOTE_TAGS" | grep -v -F "$ORIGIN_TAGS" || true)"
+
+        FILTERED_UPSTREAM_TAGS=()
+        FILTERED_SNAPD_TAGS=()
+
+        for UPSTREAM_TAG in $MISSING_TAGS; do
+          # check that we have a non-empty string
+          [ -n "$UPSTREAM_TAG" ] || continue
+
+          # check that the tag name matches the format we're expecting
+          echo "$UPSTREAM_TAG" | grep -Eq '^linux-msft-wsl-([0-9]+\.[0-9]+).*$' || continue
+
+          # check that we haven't already built this tag
+          SNAPD_TAG="${UPSTREAM_TAG/linux-msft-wsl-/linux-msft-snapd-}"
+          [ -z "$(git tag -l "$SNAPD_TAG")" ] || continue
+
+          FILTERED_UPSTREAM_TAGS+=($UPSTREAM_TAG)
+          FILTERED_SNAPD_TAGS+=($SNAPD_TAG)
+        done
+
+        echo '::echo::on'
+        if [ "${#FILTERED_UPSTREAM_TAGS[@]}" -gt 0 ]; then
+          echo "::set-output name=missing_tags::$(jq --compact-output --null-input '$ARGS.positional' --args -- "${FILTERED_UPSTREAM_TAGS[@]}")"
+          echo "::set-output name=snapd_tags::$(jq --compact-output --null-input '$ARGS.positional' --args -- "${FILTERED_SNAPD_TAGS[@]}")"
+        else
+          echo "::set-output name=missing_tags::"
+          echo "::set-output name=snapd_tags::"
+        fi
+    - name: Rebase and push master; push tags
+      run: |
+        git rebase upstream/master
+        git push --force        origin master
+        git push --force --tags origin
+    outputs:
+      missing_tags: ${{ steps.parse_tags.outputs.missing_tags }}
+      snapd_tags: ${{ steps.parse_tags.outputs.snapd_tags }}
