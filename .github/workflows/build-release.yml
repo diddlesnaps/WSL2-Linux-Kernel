@@ -1,0 +1,80 @@
+name: 🏗️ Build new release 
+
+on:
+  workflow_call:
+    inputs:
+      snapd_tags:
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        snapd_tag: ${{ fromJson(inputs.snapd_tags) }}
+        arch:
+        - x86_64
+        - arm64
+    steps:
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -yqq \
+          build-essential \
+          bison \
+          dwarves \
+          flex \
+          libelf-dev \
+          gcc-aarch64-linux-gnu
+    - name: Configrue build variables
+      id: build_variables
+      run: |
+        case "${{ matrix.arch }}" in
+          arm64)
+            ARCH=arm64
+            CROSS_COMPILE=aarch64-linux-gnu-
+            IMAGE_NAME=Image.gz
+            ;;
+          x86|x86_64)
+            ARCH=x86
+            CROSS_COMPILE=
+            IMAGE_NAME=bzImage
+            ;;
+          *)
+            false
+            ;;
+        esac
+
+        echo "::echo::on"
+        echo "::set-output name=architecture::$ARCH"
+        echo "::set-output name=build_output_filename::arch/$ARCH/boot/$IMAGE_NAME"
+        echo "::set-output name=cross_compile::$CROSS_COMPILE"
+        echo "::set-output name=release_asset_filename::vmlinux-wsl2-snapd-${{ matrix.arch }}"
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ matrix.snapd_tag }}
+    - name: Build ${{ matrix.snapd_tag }}:${{ matrix.arch }}
+      id: build
+      env:
+        ARCH: ${{ steps.build_variables.outputs.architecture }}
+        BUILD_OUTPUT_FILENAME: ${{ steps.build_variables.outputs.build_output_filename }}
+        CROSS_COMPILE: ${{ steps.build_variables.outputs.cross_compile }}
+        IMAGE_NAME: ${{ steps.build_variables.outputs.image_name }}
+        RELEASE_ASSET_FILENAME: ${{ steps.build_variables.outputs.release_asset_filename }}
+      run: |
+        # Verify that the WSL configuration is present
+        [ -f "arch/$ARCH/configs/wsl2_defconfig" ]
+
+        make ARCH="$ARCH" wsl2_defconfig snap_support.config
+        make -j$(nproc) ARCH="$ARCH" ${CROSS_COMPILE:+CROSS_COMPILE=$CROSS_COMPILE}
+
+        cp -f "$BUILD_OUTPUT_FILENAME" "$RELEASE_ASSET_FILENAME"
+    - name: Upload ${{ matrix.snapd_tag }}:${{ matrix.arch }}
+      uses: softprops/action-gh-release@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        draft: true
+        name: Release ${{ matrix.snapd_tag }}
+        tag_name: ${{ matrix.snapd_tag }}
+        files: ${{ steps.build_variables.outputs.release_asset_filename }}
