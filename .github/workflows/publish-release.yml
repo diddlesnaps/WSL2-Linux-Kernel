@@ -1,0 +1,33 @@
+name: 🚀 Publish release
+
+on:
+  workflow_call:
+    inputs:
+      snapd_tags:
+        required: true
+        type: string
+
+jobs:
+  publish_or_cleanup:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        snapd_tag: ${{ fromJson(inputs.snapd_tags) }}
+    steps:
+    - uses: actions/checkout@v3
+    - name: Publish release ${{ matrix.snapd_tag }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        [ "$(gh release view "${{ matrix.snapd_tag }}" --repo "${{ github.repository }}" --json assets --template '{{len .assets}}')" -gt 0 ]
+        gh release edit "${{ matrix.snapd_tag }}" --repo "${{ github.repository }}" --draft=false
+    - name: Remove failed release ${{ matrix.snapd_tag }}
+      if: ${{ failure() || cancelled() }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SNAPD_TAG: ${{ matrix.snapd_tag }}
+      run: |
+        UPSTREAM_TAG="${SNAPD_TAG/linux-msft-snapd-/linux-msft-wsl-}"
+        gh release delete "$SNAPD_TAG" --repo "${{ github.repository }}" || true
+        git push origin ":refs/tags/$SNAPD_TAG" || true
+        git push origin ":refs/tags/$UPSTREAM_TAG" || true
