@@ -1,0 +1,40 @@
+name: ⚙️ Continuous Delivery
+
+on:
+  schedule:
+  - cron: "0 * * * *"
+  workflow_dispatch:
+
+jobs:
+  trigger-sync:
+    if: ${{ github.repository == 'diddlesnaps/WSL2-Linux-Kernel' }}
+    uses: ./.github/workflows/sync-upstream.yml
+    secrets: inherit
+
+  trigger-tagger:
+    needs: trigger-sync
+    if: ${{ needs.trigger-sync.outputs.missing_tags }}
+    uses: ./.github/workflows/tag-release.yml
+    secrets: inherit
+    with:
+      missing_tags: ${{ needs.trigger-sync.outputs.missing_tags }}
+
+  trigger-build:
+    needs:
+    - trigger-sync # need to expliticly add this to access the outputs
+    - trigger-tagger
+    if: ${{ needs.trigger-sync.outputs.snapd_tags }}
+    uses: ./.github/workflows/build-release.yml
+    secrets: inherit
+    with:
+      snapd_tags: ${{ needs.trigger-sync.outputs.snapd_tags }}
+
+  trigger-publish:
+    needs:
+    - trigger-sync # need to expliticly add this to access the outputs
+    - trigger-build
+    if: ${{ always() && needs.trigger-sync.outputs.snapd_tags }}
+    uses: ./.github/workflows/publish-release.yml
+    secrets: inherit
+    with:
+      snapd_tags: ${{ needs.trigger-sync.outputs.snapd_tags }}
