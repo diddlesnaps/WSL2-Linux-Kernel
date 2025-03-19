@@ -35,7 +35,7 @@ as follows:
 
 3. Build the kernel using the WSL2 kernel configuration and put the modules in a `modules`
    folder under the current working directory:  
-   `$ make KCONFIG_CONFIG=Microsoft/config-wsl && make INSTALL_MOD_PATH="$PWD/modules" modules_install`
+   `$ make KCONFIG_CONFIG=Microsoft/config-wsl && make MODLIB="$PWD/modules" modules_install`
    
    You may wish to include `-j$(nproc)` on the first `make` command to build in parallel.
 
@@ -54,10 +54,10 @@ If you prefer, you can also build the modules VHDX manually as follows:
    `dd if=/dev/zero of="$PWD/modules.img" bs=1024 count=$((modules_size / 1024))`
 
 3. Setup filesystem and mount img file:
-   `lo_dev=$(sudo losetup --find --show "$PWD/modules.img") && sudo mkfs -t ext4 "$lo_dev" && sudo mount "$lo_dev" "$PWD/modules_img"`
+   `lo_dev=$(sudo losetup --find --show "$PWD/modules.img") && sudo mkfs -t ext4 "$lo_dev" && mkdir "$PWD/modules_img" && sudo mount "$lo_dev" "$PWD/modules_img"`
 
 4. Copy over the modules, unmount the img now that we're done with it:
-   `mkdir "$PWD/modules_img" && sudo cp -r "$PWD/modules" "$PWD/modules_img" && sudo umount "$PWD/modules_img"`
+   `sudo cp -r "$PWD/modules" "$PWD/modules_img" && sudo umount "$PWD/modules_img"`
 
 5. Convert the img to VHDX:
    `qemu-img convert -O VHDX "$PWD/modules.img" "$PWD/modules.vhdx"`
