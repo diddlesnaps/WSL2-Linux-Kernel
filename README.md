@@ -48,7 +48,7 @@ To save space, you can now delete the compilation artifacts:
 If you prefer, you can also build the modules VHDX manually as follows:
 
 1. Calculate the modules size (plus 256MiB for slack):
-   `modules_size=$(du -s "$PWD/modules" | awk '{print $1;}'); modules_size=$((modules_size + (256 * (1<<20))));`
+   `modules_size=$(du -bs "$PWD/modules" | awk '{print $1;}'); modules_size=$((modules_size + (256 * (1<<20))));`
 
 2. Create a blank image file for the modules:
    `dd if=/dev/zero of="$PWD/modules.img" bs=1024 count=$((modules_size / 1024))`
