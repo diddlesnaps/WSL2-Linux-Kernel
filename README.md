@@ -60,7 +60,7 @@ If you prefer, you can also build the modules VHDX manually as follows:
    `sudo cp -r "$PWD/modules/lib/modules/$(make -s kernelrelease)"/* "$PWD/modules_img" && sudo umount "$PWD/modules_img"`
 
 5. Convert the img to VHDX:
-   `qemu-img convert -O VHDX "$PWD/modules.img" "$PWD/modules.vhdx"`
+   `qemu-img convert -O vhdx "$PWD/modules.img" "$PWD/modules.vhdx"`
 
 6. Clean up:
    `rm modules.img # optionally $PWD/modules dir and the now-empty $PWD_modules_img dir too`
