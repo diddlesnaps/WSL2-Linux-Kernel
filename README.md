@@ -47,23 +47,23 @@ To save space, you can now delete the compilation artifacts:
 
 If you prefer, you can also build the modules VHDX manually as follows:
 
-1. Calculate the modules size (plus 1024 bytes for slack):
-   `modules_size=$(du -s "$PWD/modules" | awk '{print $1;}'); modules_size=$((modules_size + 1024));`
+1. Calculate the modules size (plus 256MiB for slack):
+   `modules_size=$(du -s "$PWD/modules" | awk '{print $1;}'); modules_size=$((modules_size + (256 * (1<<20))));`
 
 2. Create a blank image file for the modules:
-   `dd if=/dev/zero of="$PWD/modules.img" bs=1 count=$modules_size`
+   `dd if=/dev/zero of="$PWD/modules.img" bs=1024 count=$((modules_size / 1024))`
 
 3. Setup filesystem and mount img file:
-   `lo_dev=$(losetup --find --show "$PWD/modules.img") && mkfs -t ext4 "$lo_dev" && sudo mount "$lo_dev" "$PWD/modules_img"`
+   `lo_dev=$(sudo losetup --find --show "$PWD/modules.img") && sudo mkfs -t ext4 "$lo_dev" && sudo mount "$lo_dev" "$PWD/modules_img"`
 
 4. Copy over the modules, unmount the img now that we're done with it:
-   `cp -r "$PWD/modules" "$PWD/modules_img" && sudo umount "$PWD/modules_img"`
+   `mkdir "$PWD/modules_img" && sudo cp -r "$PWD/modules" "$PWD/modules_img" && sudo umount "$PWD/modules_img"`
 
 5. Convert the img to VHDX:
    `qemu-img convert -O VHDX "$PWD/modules.img" "$PWD/modules.vhdx"`
 
 6. Clean up:
-   `rm modules.img # optionally $PWD/modules dir too`
+   `rm modules.img # optionally $PWD/modules dir and the now-empty $PWD_modules_img dir too`
 
 # Install Instructions
 
