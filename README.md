@@ -57,7 +57,7 @@ If you prefer, you can also build the modules VHDX manually as follows:
    `lo_dev=$(sudo losetup --find --show "$PWD/modules.img") && sudo mkfs -t ext4 "$lo_dev" && mkdir "$PWD/modules_img" && sudo mount "$lo_dev" "$PWD/modules_img"`
 
 4. Copy over the modules, unmount the img now that we're done with it:
-   `sudo cp -r "$PWD/modules" "$PWD/modules_img" && sudo umount "$PWD/modules_img"`
+   `sudo cp -r "$PWD/modules/lib/modules/$(make -s kernelrelease)" "$PWD/modules_img" && sudo umount "$PWD/modules_img"`
 
 5. Convert the img to VHDX:
    `qemu-img convert -O VHDX "$PWD/modules.img" "$PWD/modules.vhdx"`
