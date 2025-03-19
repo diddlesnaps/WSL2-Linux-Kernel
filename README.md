@@ -35,7 +35,7 @@ as follows:
 
 3. Build the kernel using the WSL2 kernel configuration and put the modules in a `modules`
    folder under the current working directory:  
-   `$ make KCONFIG_CONFIG=Microsoft/config-wsl && make MODLIB="$PWD/modules" modules_install`
+   `$ make KCONFIG_CONFIG=Microsoft/config-wsl && make INSTALL_MOD_PATH="$PWD/modules" modules_install`
    
    You may wish to include `-j$(nproc)` on the first `make` command to build in parallel.
 
