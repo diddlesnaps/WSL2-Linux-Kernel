@@ -9342,7 +9342,7 @@ CONFIG_FSCACHE=y
 #
 # CD-ROM/DVD Filesystems
 #
-# CONFIG_ISO9660_FS is not set
+CONFIG_ISO9660_FS=m
 # CONFIG_UDF_FS is not set
 # end of CD-ROM/DVD Filesystems
 
